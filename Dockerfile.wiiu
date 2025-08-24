@@ -55,64 +55,36 @@ COPY . .
 # Convert line endings and skip luasocket patches (luasocket is disabled for Wii U)
 RUN find /project -name '*.cpp' -o -name '*.hpp' -o -name '*.c' -o -name '*.h' | xargs dos2unix || true
 
-# Create game.zip before build (needed for fusing with executable)
-RUN echo "=== Creating game.zip from game folder ===" && \
-    mkdir -p /project/build && \
+# Note: Shaders (.fs files) are in Love2D format and compiled at runtime by ShaderCompiler.cpp
+# Pre-compiling them with CafeGLSL doesn't work because they use Love2D syntax (extern, effect(), etc.)
+RUN echo "=== Shader files will be compiled at runtime by the engine ===" && \
+    echo "Found Love2D shader files:" && \
+    find game/resources/shaders -name "*.fs" 2>/dev/null | while read shader; do \
+        echo "  - $(basename "$shader")"; \
+    done || echo "No game/resources/shaders directory found"
+
+# Build
+RUN echo "=== Cleaning old build directory ===" && \
+    rm -rf build && \
+    mkdir -p build && cd build && \
+    echo "=== Creating game.love from game folder ===" && \
     cd /project/game && \
     zip -r /project/build/game.love . && \
     echo "=== game.love created successfully ===" && \
-    ls -la /project/build/game.love
-
-# Compile all shaders statically using CafeGLSL
-RUN echo "=== Compiling shaders with CafeGLSL static compiler ===" && \
-    mkdir -p /project/platform/cafe/content/shaders/game && \
-    cd /project && \
-    echo "=== Converting .fs shaders to GLSL and compiling to .gsh ===" && \
-    # Create a default vertex shader for LÖVE 2D \
-    echo "#version 330 core" > /tmp/default_vs.glsl && \
-    echo "layout(location = 0) in vec4 VertexPosition;" >> /tmp/default_vs.glsl && \
-    echo "layout(location = 1) in vec4 VertexTexCoord;" >> /tmp/default_vs.glsl && \
-    echo "layout(location = 2) in vec4 VertexColor;" >> /tmp/default_vs.glsl && \
-    echo "uniform mat4 TransformProjectionMatrix;" >> /tmp/default_vs.glsl && \
-    echo "varying vec4 VaryingTexCoord;" >> /tmp/default_vs.glsl && \
-    echo "varying vec4 VaryingColor;" >> /tmp/default_vs.glsl && \
-    echo "void main() {" >> /tmp/default_vs.glsl && \
-    echo "    VaryingTexCoord = VertexTexCoord;" >> /tmp/default_vs.glsl && \
-    echo "    VaryingColor = VertexColor;" >> /tmp/default_vs.glsl && \
-    echo "    gl_Position = TransformProjectionMatrix * VertexPosition;" >> /tmp/default_vs.glsl && \
-    echo "}" >> /tmp/default_vs.glsl && \
-    find game/resources/shaders -name "*.fs" | while read shader; do \
-        name=$(basename "$shader" .fs); \
-        echo "Processing shader: $name"; \
-        # Convert LÖVE .fs to GLSL fragment shader \
-        echo "#version 330 core" > "/tmp/${name}_fs.glsl"; \
-        echo "uniform sampler2D MainTexture;" >> "/tmp/${name}_fs.glsl"; \
-        echo "uniform float time;" >> "/tmp/${name}_fs.glsl"; \
-        echo "uniform vec2 love_ScreenSize;" >> "/tmp/${name}_fs.glsl"; \
-        echo "in vec4 VaryingTexCoord;" >> "/tmp/${name}_fs.glsl"; \
-        echo "in vec4 VaryingColor;" >> "/tmp/${name}_fs.glsl"; \
-        echo "out vec4 fragColor;" >> "/tmp/${name}_fs.glsl"; \
-        echo "void main() {" >> "/tmp/${name}_fs.glsl"; \
-        echo "    fragColor = texture(MainTexture, VaryingTexCoord.xy) * VaryingColor;" >> "/tmp/${name}_fs.glsl"; \
-        echo "}" >> "/tmp/${name}_fs.glsl"; \
-        # Compile to .gsh using CafeGLSL with default vertex shader \
-        /opt/CafeGLSL/glslcompiler.elf -vs "/tmp/default_vs.glsl" -ps "/tmp/${name}_fs.glsl" -o "/project/platform/cafe/content/shaders/game/${name}.gsh" && \
-        echo "Successfully compiled ${name}.gsh" || echo "Failed to compile ${name}"; \
-    done && \
-    echo "=== Shader compilation completed ===" && \
-    ls -la /project/platform/cafe/content/shaders/game/ || echo "No game shaders directory found"
-
-# Build
-RUN mkdir -p build && cd build && \
+    ls -la /project/build/game.love && \
+    cd /project/build && \
     ls -lh /project/platform/cafe/ && \
-    echo "=== Starting CMake configuration ===" && \
-    echo "=== Pre-compiled shaders available ===" && \
-    ls -la /project/platform/cafe/content/shaders/game/ 2>/dev/null || echo "No pre-compiled shaders found" && \
-    cmake .. -DNINTENDO_WIIU=ON -DUSE_CAFEGLSL=OFF -DCMAKE_BUILD_TYPE=$BUILD_TYPE -DCMAKE_TOOLCHAIN_FILE=$DEVKITPRO/cmake/WiiU.cmake -G Ninja && \
+    echo "=== Starting fresh CMake configuration ===" && \
+    echo "=== Shaders will be compiled at runtime by ShaderCompiler.cpp ===" && \
+    echo "=== Listing actual source files to debug case sensitivity issues ===" && \
+    find /project/source -name "*.cpp" | sort > /tmp/actual_files.txt && \
+    echo "=== First 30 actual files found ===" && \
+    head -30 /tmp/actual_files.txt && \
+    cmake .. -DNINTENDO_WIIU=ON -DUSE_CAFEGLSL=ON -DCMAKE_BUILD_TYPE=$BUILD_TYPE -DCMAKE_TOOLCHAIN_FILE=$DEVKITPRO/cmake/WiiU.cmake -G "Unix Makefiles" || (echo "=== CMake failed, but continuing to show file listing ===" && cat /tmp/actual_files.txt) && \
     echo "=== CMake configuration completed ===" && \
-    echo "=== Starting ninja build ===" && \
-    ninja || (echo "=== Ninja failed, showing build directory contents ===" && ls -la && exit 1) && \
-    echo "=== Ninja build completed ===" && \
+    echo "=== Starting make build ===" && \
+    make -j4 || (echo "=== Make failed, showing build directory contents ===" && ls -la && exit 1) && \
+    echo "=== Make build completed ===" && \
     echo "=== BUILD OUTPUT DEBUG ===" && \
     ls -la && \
     echo "=== FUSING GAME DATA INTO WUHB ===" && \

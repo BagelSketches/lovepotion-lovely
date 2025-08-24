@@ -16,8 +16,7 @@ echo Building Docker image...
 docker build --build-arg BUILD_TYPE=%BUILD_TYPE% -f Dockerfile.wiiu -t lovepotion-wiiu .
 
 if %ERRORLEVEL% neq 0 (
-    echo Docker build failed! 
-    pause
+    echo Docker build failed!
     exit /b 1
 )
 
@@ -36,4 +35,3 @@ dir /b build
 
 cd
 .\extract-build.bat
-pause
