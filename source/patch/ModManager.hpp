@@ -34,6 +34,12 @@ public:
     const std::vector<Patch>& getPatchesFor(const std::string& path) const;
     const std::vector<Patch>& getAllPatches() const { return patches; }
 
+    // Helpers for COPY/OVERRIDE results
+    std::vector<std::string> getPrepend(const std::string& path) const;
+    std::vector<std::string> getAppend(const std::string& path) const;
+    bool hasOverride(const std::string& path) const;
+    std::string getOverride(const std::string& path) const;
+
     // Overlay mount point used for modules/copy results
     std::string getOverlayDir() const { return overlayDir; }
 
@@ -45,6 +51,11 @@ private:
 
     std::vector<Patch> patches;
     std::string overlayDir;
+
+    // Data structures used to store copy/override results
+    std::unordered_map<std::string, std::vector<std::string>> prepends;
+    std::unordered_map<std::string, std::vector<std::string>> appends;
+    std::unordered_map<std::string, std::string> overrides;
 
     bool scanned = false;
 };
