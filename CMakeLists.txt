@@ -477,6 +477,8 @@ source/modules/sound/lullaby/ModPlugDecoder.cpp
 source/modules/sound/lullaby/MP3Decoder.cpp
 source/modules/sound/lullaby/VorbisDecoder.cpp
 source/modules/sound/lullaby/WaveDecoder.cpp
+source/patch/ModManager.cpp
+source/patch/PatchEngine.cpp
 )
 
 # Add mouse module for non-Wii U platforms only (Wii U doesn't support mouse)
