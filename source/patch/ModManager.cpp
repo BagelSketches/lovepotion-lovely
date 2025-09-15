@@ -4,6 +4,7 @@
 #include <fstream>
 #include <iostream>
 #include <sstream>
+#include "patch/Logger.hpp"
 #include <physfs.h>
 
 // Very small TOML-ish parser for the subset we need (not a full TOML implementation)
@@ -27,6 +28,8 @@ ModManager& ModManager::get()
 
 ModManager::ModManager()
 {
+    // Initialize logger to a sensible fallback (local Mods folder). Real overlay may be set later.
+    Logger::init("Mods");
 }
 
 void ModManager::scan()
@@ -43,8 +46,18 @@ void ModManager::scan()
     {
         if (!std::filesystem::exists(modsdir))
         {
-            scanned = true;
-            return;
+            // try fallback
+            if (std::filesystem::exists(fallback))
+            {
+                Logger::info("Mods directory not found at sdcard, using fallback: " + fallback);
+                modsdir = fallback;
+            }
+            else
+            {
+                Logger::info("No mods directory found (sdcard or fallback). Skipping mod scan.");
+                scanned = true;
+                return;
+            }
         }
 
         if (!std::filesystem::exists(modsdir) && std::filesystem::exists(fallback))
@@ -67,6 +80,8 @@ void ModManager::scan()
                 PHYSFS_mount(lovelydir.string().c_str(), nullptr, 1);
             }
 
+            Logger::info(std::string("Mounted mod lovely dir: ") + lovelydir.string());
+
             for (auto const& file : std::filesystem::recursive_directory_iterator(lovelydir))
             {
                 if (!file.is_regular_file())
@@ -78,6 +93,7 @@ void ModManager::scan()
                 // If file is a toml manifest, parse patches
                 if (file.path().filename() == "lovely.toml")
                 {
+                    Logger::info(std::string("Parsing lovely.toml for mod: ") + dirEntry.path().string());
                     parseLovelyToml(file.path().string(), lovelydir);
                     continue;
                 }
@@ -93,7 +109,7 @@ void ModManager::scan()
     }
     catch (std::exception& e)
     {
-        std::cerr << "ModManager scan error: " << e.what() << "\n";
+        Logger::error(std::string("ModManager scan error: ") + e.what());
     }
 
     scanned = true;

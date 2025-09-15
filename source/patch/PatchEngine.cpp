@@ -4,6 +4,7 @@
 #include <fstream>
 #include <sstream>
 #include <regex>
+#include "patch/Logger.hpp"
 
 static std::string applyMatchIndent(const std::string& payload, const std::string& indent)
 {
@@ -28,6 +29,15 @@ std::string PatchEngine::apply(const std::string& path, const std::string& origi
     auto& mm = ModManager::get();
     mm.scan();
 
+    // Initialize logger to overlay dir if available
+    try {
+        std::string overlay = mm.getOverlayDir();
+        if (!overlay.empty())
+            Logger::init(overlay);
+    } catch (...) {}
+
+    Logger::info(std::string("PatchEngine: applying patches for: ") + path);
+
     // Collect patches for this target and sort by priority
     std::vector<Patch> applicable;
     for (const auto& p : mm.getAllPatches())
@@ -42,6 +52,7 @@ std::string PatchEngine::apply(const std::string& path, const std::string& origi
 
     for (const auto& p : applicable)
     {
+        Logger::info(std::string("Applying patch type=") + std::to_string(p.type) + " target=" + p.target);
         if (p.type == Patch::OVERRIDE)
         {
             std::ifstream ifs(p.source_file, std::ios::binary);
@@ -50,6 +61,7 @@ std::string PatchEngine::apply(const std::string& path, const std::string& origi
                 std::ostringstream ss;
                 ss << ifs.rdbuf();
                 result = ss.str();
+                Logger::info(std::string("Override applied for: ") + p.target + " from " + p.source_file);
             }
         }
         else if (p.type == Patch::COPY)
@@ -105,9 +117,9 @@ std::string PatchEngine::apply(const std::string& path, const std::string& origi
                     out.append(result.substr(lastPos));
                     result.swap(out);
                 }
-                catch (std::regex_error&)
+                catch (std::regex_error& e)
                 {
-                    // ignore regex errors
+                    Logger::error(std::string("Regex error for pattern: ") + p.pattern + " error: " + e.what());
                 }
             }
             else
@@ -153,6 +165,7 @@ std::string PatchEngine::apply(const std::string& path, const std::string& origi
                         break;
                     }
                 }
+                Logger::info(std::string("Pattern/regex patch applied for: ") + p.target);
             }
         }
     }
